@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"distributed-testing/container"
+	"distributed-testing/scenario/parser"
+	"fmt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"go.uber.org/zap"
@@ -10,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -24,6 +27,13 @@ type (
 )
 
 func main() {
+	reader := strings.NewReader("Feature: abc does xyz")
+
+	_, err := reader.WriteTo(parser.MakeWriter())
+
+	steps := parser.GetSteps()
+	fmt.Println(steps)
+
 	_ = NewIdk()
 	ctx := context.Background()
 
@@ -91,5 +101,8 @@ func sendCall() {
 	if err != nil {
 		panic(err)
 	}
-	io.Copy(os.Stdout, resp.Body)
+
+	if _, err = io.Copy(os.Stdout, resp.Body); err != nil {
+		panic(err)
+	}
 }
