@@ -7,7 +7,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/go-connections/nat"
+	"github.com/mitchellh/go-homedir"
 	"io"
 	"os"
 	"time"
@@ -56,13 +58,35 @@ func pullImage(cli *client.Client, image string) error {
 	return nil
 }
 
-// TODO: Build image from a Dockerfile
-func buildImage(cli *client.Client) error {
-	_, err := cli.ImageBuild(context.Background(), nil, types.ImageBuildOptions{})
+func tarDirectory(path string) (io.ReadCloser, error) {
+	path, err := homedir.Expand(path)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return archive.TarWithOptions(path, &archive.TarOptions{})
+}
+
+// TODO: Test this works
+func buildImage(cli *client.Client, path string, imageName string) error {
+	tar, err := tarDirectory(path)
 
 	if err != nil {
 		return err
 	}
+
+	defer tar.Close()
+
+	resp, err := cli.ImageBuild(context.Background(), tar, types.ImageBuildOptions{
+		Tags: []string{imageName},
+	})
+
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
 
 	return nil
 }
@@ -131,29 +155,19 @@ func RunContainer(options *MakeContainerOptions) (string, error) {
 		return "", err
 	}
 
-	//defer cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{Force: true})
-
 	if len(resp.Warnings) > 0 {
 		for _, warning := range resp.Warnings {
 			fmt.Printf("Warning: %v", warning)
 		}
 	}
 
-	// TODO: We need to see any errors from the logs when starting
+	// TODO: We need to see any errors from the logs when starting, do we have to attach at least Stderr?
 	if err = cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		return "", containerStartError{
 			imageName: options.ImageName,
 			error:     err,
 		}
 	}
-
-	//if err = AttachContainerStdout(cli, resp.ID); err != nil {
-	//	panic(err)
-	//}
-	//
-	//if err = WaitForContainerToExit(cli, resp.ID); err != nil {
-	//	return "", err
-	//}
 
 	return resp.ID, nil
 }
@@ -185,7 +199,7 @@ func AttachContainerStdout(cli *client.Client, containerId string) error {
 		return err
 	}
 
-	// TODO: When to close this?
+	// TODO: Should the ReadCloser be returned for closing once we are done attaching?
 	defer attachResp.Close()
 	_, err = io.Copy(os.Stdout, attachResp.Reader)
 	return err

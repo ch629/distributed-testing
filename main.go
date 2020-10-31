@@ -1,19 +1,14 @@
 package main
 
 import (
-	"context"
-	"distributed-testing/container"
-	"distributed-testing/scenario/parser"
+	"distributed-testing/scenario/scanner"
 	"fmt"
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"io"
 	"net/http"
 	"os"
-	"strings"
-	"time"
+	"path"
 )
 
 type (
@@ -27,53 +22,23 @@ type (
 )
 
 func main() {
-	reader := strings.NewReader("Feature: abc does xyz")
-
-	_, err := reader.WriteTo(parser.MakeWriter())
-
-	steps := parser.GetSteps()
-	fmt.Println(steps)
-
-	_ = NewIdk()
-	ctx := context.Background()
-
-	options := &container.MakeContainerOptions{
-		ImageHost:     "docker.io",
-		ImageName:     "mendhak/http-https-echo",
-		ContainerName: "echo-container",
-		//Cmd: []string{"cat", "/app/main.go"},
-	}
-
-	containerId, err := container.RunContainer(options)
+	wd, _ := os.Getwd()
+	file, err := os.Open(path.Join(wd, "example.feature"))
 
 	if err != nil {
 		panic(err)
 	}
 
-	cli, err := client.NewEnvClient()
-
-	if err != nil {
-		panic(err)
+	scanner := scanner.NewScanner(file)
+	for {
+		if step := scanner.Scan(); step != nil {
+			fmt.Println("Step: ", *step)
+			continue
+		}
+		break
 	}
 
-	if err = container.WaitForContainer(&container.WaitForContainerOptions{
-		HealthCheck: healthCheck,
-		Interval:    500 * time.Millisecond,
-		Retries:     5,
-	}); err != nil {
-		panic(err)
-	}
-
-	sendCall()
-
-	timeout := 10 * time.Second
-	if err = cli.ContainerStop(ctx, containerId, &timeout); err != nil {
-		panic(err)
-	}
-
-	if err = cli.ContainerRemove(ctx, containerId, types.ContainerRemoveOptions{Force: true}); err != nil {
-		panic(err)
-	}
+	file.Close()
 }
 
 func healthCheck() bool {

@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// TODO: Do we have some sort of system to register endpoints as JSON or TOML or through Swagger docs which can then be referenced by name in the scenarios?
 type (
 	Request struct {
 		BaseUrl string
@@ -20,6 +21,11 @@ type (
 
 func NewRequest(baseUrl string) Request {
 	return Request{BaseUrl: baseUrl}
+}
+
+func (request Request) WithBaseUrl(baseUrl string) Request {
+	request.BaseUrl = baseUrl
+	return request
 }
 
 func (request Request) WithMethod(method string) Request {
@@ -64,6 +70,12 @@ func (request Request) buildUrl() string {
 	return ""
 }
 
-func (request Request) SendRequest() (*http.Request, error) {
-	return http.NewRequest(request.Method, request.buildUrl(), strings.NewReader(request.Body))
+func (request Request) SendRequest() (*http.Response, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest(request.Method, request.buildUrl(), strings.NewReader(request.Body))
+
+	if err != nil {
+		return nil, err
+	}
+	return client.Do(req)
 }
